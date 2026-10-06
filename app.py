@@ -99,6 +99,18 @@ st.markdown(f"""
     margin-right: auto !important;
     max-width: 100% !important;
     }}
+    /* 手机端：分栏变单列，图表占满整行 */
+    @media (max-width: 768px) {{
+        div[data-testid="column"] {{
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }}
+        iframe {{
+            width: 100% !important;
+            min-width: 100% !important;
+        }}
+    }}
 </style>
 """, unsafe_allow_html=True)
 

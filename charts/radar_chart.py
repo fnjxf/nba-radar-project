@@ -21,9 +21,9 @@ def create_radar_chart(players_stats):
 
     for player in players_stats:
         values = [
-        player['PTS'], player['REB'], player['AST'],
-        player['STL'], player['BLK'], player['3PM'],
-        player['FG%'], player['FT%'], player['TOV'], player['MIN']
+            player['PTS'], player['REB'], player['AST'],
+            player['STL'], player['BLK'], player['3PM'],
+            player['FG%'], player['FT%'], player['TOV'], player['MIN']
         ]
         color = player.get('team_color')
         
@@ -36,14 +36,41 @@ def create_radar_chart(players_stats):
         )
 
     radar.set_global_opts(
-        title_opts=opts.TitleOpts(title="NBA 季后赛球员数据对比", pos_left="center", 
-        title_textstyle_opts=opts.TextStyleOpts(
-        color="#FFD700"   # 金色
-    )),
+        title_opts=opts.TitleOpts(
+            title="NBA 季后赛球员数据对比", 
+            pos_left="center", 
+            title_textstyle_opts=opts.TextStyleOpts(color="#FFD700")
+        ),
         legend_opts=opts.LegendOpts(pos_top="bottom"),
         tooltip_opts=opts.TooltipOpts(trigger="item")
     )
 
     output_file = "player_radar_chart.html"
     radar.render(output_file)
+
+    # ---------- 注入移动端适配 ----------
+    with open(output_file, 'r', encoding='utf-8') as f:
+        html = f.read()
+
+    mobile_patch = '''
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            overflow-x: hidden !important;
+        }
+        /* 图表容器撑满 */
+        #main, .chart-container, div[_echarts_instance_] {
+            width: 100% !important;
+            margin: 0 auto !important;
+        }
+    </style>
+    '''
+    html = html.replace('</head>', mobile_patch + '</head>')
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(html)
     return output_file
+
