@@ -93,10 +93,37 @@ st.markdown(f"""
     span[data-baseweb="tag"] span {{
         color: {btn_text} !important;
     }}
+    iframe {{
+    display: block !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    max-width: 100% !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🏀 NBA 季后赛球员雷达图")
+# 手机端引导提示（只在窄屏显示）
+st.markdown("""
+<style>
+    .mobile-hint { display: none; }
+    @media (max-width: 768px) {
+        .mobile-hint {
+            display: block;
+            background: linear-gradient(90deg, #1D428A, #FFC72C);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+    }
+</style>
+<div class="mobile-hint">
+    📱 点击左上角 <b>&gt;</b> 打开侧边栏，选择赛季和球员后点「生成雷达图」
+</div>
+""", unsafe_allow_html=True)
+
 
 # ---------- 读取球员列表 ----------
 @st.cache_data

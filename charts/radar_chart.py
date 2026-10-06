@@ -16,7 +16,7 @@ def create_radar_chart(players_stats):
         {"name": "上场时间", "max": 48},
     ]
 
-    radar = Radar()
+    radar = Radar(init_opts=opts.InitOpts(width="100%", height="600px"))
     radar.add_schema(schema=schema, shape="circle", center=["50%", "50%"], radius="60%")
 
     for player in players_stats:
