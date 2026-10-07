@@ -4,6 +4,8 @@ import pandas as pd
 import os
 from utils.data_fetcher import get_playoff_stats
 from charts.radar_chart import create_radar_chart
+from utils.share_card import create_share_card
+from utils.welcome_dialog import show_welcome_dialog
 
 st.set_page_config(page_title="NBA 雷达图对比", layout="wide")
 
@@ -126,6 +128,10 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.title("🏀 NBA 季后赛球员雷达图")
+
+# ---------- 进站声明弹窗（每会话一次） ----------
+show_welcome_dialog()
+
 # 手机端引导提示（只在窄屏显示）
 st.markdown("""
 <style>
@@ -285,6 +291,7 @@ if st.sidebar.button("生成雷达图"):
                 st.session_state.radar_html = html_content
                 st.session_state.radar_players = players_stats
                 st.session_state.radar_season = season
+                st.session_state.share_card_bytes = None 
                 st.success("生成成功！")
             else:
                 st.error("没有有效数据，请检查球员名称或赛季")
@@ -340,6 +347,15 @@ if st.session_state.get("radar_html"):
     with col_left:
         st.subheader("📊 能力雷达图")
         st.iframe(html_content, height=600)
+        
+    # ---------- 一键分享卡片 ----------          ← 从这开始全是新增
+    if st.button("📸 生成分享卡片", ...):
+        with st.spinner("正在生成分享卡片..."):
+            out_path = create_share_card(players_stats, season_used, ...)
+            ...
+    if st.session_state.get("share_card_bytes"):
+        st.image(...)          # 预览
+        st.download_button(...) # 下载
 
     with col_right:
         st.subheader("🏆 球员信息")
