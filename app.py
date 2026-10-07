@@ -348,7 +348,7 @@ if st.session_state.get("radar_html"):
             if os.path.exists(photo_path):
                 st.image(photo_path, width=450)
             else:
-                st.image("https://via.placeholder.com/120?text=No+Photo", width=120)
+                st.image("https://placehold.co/120?text=No+Photo", width=120)
 
             st.markdown(f"**{player['name']}**")
 
