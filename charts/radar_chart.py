@@ -24,41 +24,21 @@ TEAM_COLOR_DARK = {
     # ---------- 西部 ----------
     "#0E2240": "#FEC524",  # 掘金深蓝 → 金黄
     "#1D428A": "#FFC72C",  # 勇士蓝 → 金黄
-    "#C8102E": "#FF4B4B",  # 火箭红 → 亮红
     "#5A2D81": "#8E54C0",  # 国王紫 → 亮紫
     "#552A83": "#FDB927",  # 湖人紫 → 金黄
-    "#5D76A9": "#DBDAD8",  # 灰熊蓝 → 灰白
-    "#0C2340": "#78BE20",  # 森林狼深蓝 → 亮绿
+    "#0C2340": "#78BE20",  # 森林狼/鹈鹕深蓝 → 亮绿
     "#00538C": "#B8C4CA",  # 独行侠深蓝 → 银
     "#E56020": "#FF8C42",  # 太阳橙 → 亮橙
-    "#C8102E": "#FF4B4B",  # 快船红 → 亮红
     "#007AC1": "#EF3B24",  # 雷霆蓝 → 橙红
-    "#002B5C": "#F9A01B",  # 爵士深蓝 → 金黄
-    "#E03A3E": "#FF6B6B",  # 开拓者红 → 亮红
-    "#0C2340": "#78BE20",  # 鹈鹕深蓝 → 亮绿
     "#C4CED4": "#C4CED4",  # 马刺银 → 银
 }
+
+
 def create_radar_chart(players_stats, dark_mode=True):
-    # ---------- 坐标轴配色 ----------
-    if dark_mode:
-        axis_name_color = "#E0E6F0"       # 维度名称：亮灰白
-        axis_label_color = "#B0C4DE"      # 刻度数字：浅蓝灰
-        split_line_color = "#4A5570"      # 网格线
-        split_area_colors = ["rgba(42,48,80,0.25)"]
-        legend_color = "#FAFAFA"
-        tooltip_bg = "#1A2035"
-        tooltip_text = "#FAFAFA"
-        tooltip_border = "#FFD700"
-    else:
-        axis_name_color = "#262730"
-        axis_label_color = "#555555"
-        split_line_color = "#CCCCCC"
-        split_area_colors = ["rgba(220,220,230,0.3)"]
-        legend_color = "#262730"
-        tooltip_bg = "#FFFFFF"
-        tooltip_text = "#262730"
-        tooltip_border = "#CCCCCC"
-        
+    # 只保留会用到的颜色变量
+    axis_name_color = "#E0E6F0" if dark_mode else "#262730"
+    split_line_color = "#4A5570" if dark_mode else "#CCCCCC"
+
     schema = [
         {"name": "得分", "max": 27},
         {"name": "篮板", "max": 10},
@@ -73,25 +53,13 @@ def create_radar_chart(players_stats, dark_mode=True):
     ]
 
     radar = Radar(init_opts=opts.InitOpts(width="100%", height="600px"))
+    # ⚠️ 只保留基础参数，兼容老版本 pyecharts
     radar.add_schema(
         schema=schema,
         shape="circle",
         center=["50%", "50%"],
         radius="60%",
-        # 控制维度名称（得分、篮板……）的颜色
-        textstyle_opts=opts.TextStyleOpts(color=axis_name_color, font_size=13),
-        # 网格线
-        splitline_opt=opts.SplitLineOpts(
-            is_show=True,
-            linestyle_opts=opts.LineStyleOpts(color=split_line_color)
-        ),
-        # 背景填充
-        splitarea_opt=opts.SplitAreaOpts(
-            is_show=True,
-            areastyle_opts=opts.AreaStyleOpts(color=split_area_colors)
-        ),
     )
-
 
     for player in players_stats:
         values = [
@@ -105,8 +73,6 @@ def create_radar_chart(players_stats, dark_mode=True):
         if dark_mode and color in TEAM_COLOR_DARK:
             color = TEAM_COLOR_DARK[color]
 
-
-        
         radar.add(
             series_name=player['name'],
             data=[values],
@@ -117,49 +83,49 @@ def create_radar_chart(players_stats, dark_mode=True):
 
     radar.set_global_opts(
         title_opts=opts.TitleOpts(
-            title="NBA 季后赛球员数据对比", 
-            pos_left="center", 
+            title="NBA 季后赛球员数据对比",
+            pos_left="center",
             title_textstyle_opts=opts.TextStyleOpts(color="#FFD700")
         ),
-        legend_opts=opts.LegendOpts(
-            pos_top="bottom",
-            textstyle_opts=opts.TextStyleOpts(color=legend_color)
-        ),
-        tooltip_opts=opts.TooltipOpts(
-            trigger="item",
-            background_color=tooltip_bg,
-            border_color=tooltip_border,
-            textstyle_opts=opts.TextStyleOpts(color=tooltip_text)
-        )
-
+        legend_opts=opts.LegendOpts(pos_top="bottom"),
+        tooltip_opts=opts.TooltipOpts(trigger="item")
     )
 
     output_file = "player_radar_chart.html"
     radar.render(output_file)
 
-    # ---------- 注入移动端适配 ----------
+    # ---------- 注入移动端适配 + 颜色强制覆盖 ----------
     with open(output_file, 'r', encoding='utf-8') as f:
         html = f.read()
 
-    mobile_patch = '''
+    # 用 f-string 注入动态颜色
+    mobile_patch = f'''
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        html, body {
+        html, body {{
             margin: 0 !important;
             padding: 0 !important;
             width: 100% !important;
             overflow-x: hidden !important;
-        }
+        }}
         /* 图表容器撑满 */
-        #main, .chart-container, div[_echarts_instance_] {
+        #main, .chart-container, div[_echarts_instance_] {{
             width: 100% !important;
             margin: 0 auto !important;
-        }
+        }}
+        /* 强制雷达图所有文字颜色（维度名称、刻度数字、图例） */
+        svg text {{
+            fill: {axis_name_color} !important;
+        }}
+        /* 网格线颜色 */
+        svg line {{
+            stroke: {split_line_color} !important;
+        }}
     </style>
     '''
     html = html.replace('</head>', mobile_patch + '</head>')
 
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(html)
-    return output_file
 
+    return output_file
