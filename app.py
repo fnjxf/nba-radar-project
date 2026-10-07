@@ -347,15 +347,30 @@ if st.session_state.get("radar_html"):
     with col_left:
         st.subheader("📊 能力雷达图")
         st.iframe(html_content, height=600)
-        
-    # ---------- 一键分享卡片 ----------          ← 从这开始全是新增
-    if st.button("📸 生成分享卡片", ...):
-        with st.spinner("正在生成分享卡片..."):
-            out_path = create_share_card(players_stats, season_used, ...)
-            ...
-    if st.session_state.get("share_card_bytes"):
-        st.image(...)          # 预览
-        st.download_button(...) # 下载
+
+        # ---------- 一键分享卡片 ----------
+        if st.button("📸 生成分享卡片", width="stretch",
+                     help="生成带二维码的分享图，扫码可回到本站"):
+            with st.spinner("正在生成分享卡片..."):
+                out_path = create_share_card(
+                    players_stats, season_used,
+                    dark_mode=st.session_state.dark_mode
+                )
+                with open(out_path, 'rb') as f:
+                    st.session_state.share_card_bytes = f.read()
+            # 生成后立即刷新，让下方预览/下载按钮出现
+            st.rerun()
+
+        if st.session_state.get("share_card_bytes"):
+            st.image(st.session_state.share_card_bytes, caption="扫码即可分享",
+                     width="stretch")
+            st.download_button(
+                label="⬇️ 下载分享卡片",
+                data=st.session_state.share_card_bytes,
+                file_name=f"nba_radar_{season_used}.png",
+                mime="image/png",
+                width="stretch",
+            )
 
     with col_right:
         st.subheader("🏆 球员信息")

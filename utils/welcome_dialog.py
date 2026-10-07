@@ -29,7 +29,7 @@ def _welcome_modal():
     st.markdown(f"[👉 前往项目详情页]({PROJECT_URL})")
     st.caption("此弹窗每个会话只显示一次，祝您使用愉快 🏀")
 
-    if st.button("我知道了，开始使用", type="primary", use_container_width=True):
+    if st.button("我知道了，开始使用", type="primary", width="stretch"):
         st.session_state[_DIALOG_KEY] = True
         st.rerun()
 

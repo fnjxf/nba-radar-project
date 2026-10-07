@@ -15,6 +15,10 @@
 - **状态保持**：切换主题、排序、赛季时，已生成的雷达图不丢失
 - **移动端适配**：手机浏览器访问自动调整布局
 
+## 🖼️ 效果预览
+
+<img src="screenshot-pc.png" alt="电脑端界面预览" style="height: 400px;" />
+<img src="screenshot-mobile.png" alt="手机端界面预览" style="height: 400px;" />
 
 ## 🚀 使用说明
 
