@@ -38,12 +38,13 @@ nba_radar_project/
 │   └── data_fetcher.py                 # 从 CSV 读取球员数据
 ├── data/
 │   ├── player_stats_playoffs_2022-23.csv
-│   └── player_stats_playoffs_2023-24.csv
+│   ├── player_stats_playoffs_2023-24.csv
+|   └── player_stats_playoffs_2024-25.csv
 ├── photos/
 │   ├── 2022-23/                        # 2022-23 赛季球员定妆照
 │   └── 2023-24/                        # 2023-24 赛季球员定妆照
 ├── tools/
-│   └── fetch_data_api.py               # 从第三方 API 拉取数据生成 CSV
+│   └── get_data_api.py               # 从第三方 API 拉取数据生成 CSV
 ├── requirements.txt
 └── README.md
 ```
