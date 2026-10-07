@@ -2,42 +2,13 @@
 from pyecharts.charts import Radar
 from pyecharts import options as opts
 
-# 深色模式下，把太暗的球队主色替换成亮色辅助色
-TEAM_COLOR_DARK = {
-    # ---------- 东部 ----------
-    "#007A33": "#00A651",  # 凯尔特人绿 → 亮绿
-    "#000000": "#FFFFFF",  # 篮网黑 → 白
-    "#F58426": "#FFA94D",  # 尼克斯橙 → 亮橙
-    "#006BB6": "#ED174C",  # 76人蓝 → 红
-    "#CE1141": "#FF4B4B",  # 公牛红 → 亮红
-    "#860038": "#FDBB30",  # 骑士酒红 → 金黄
-    "#C8102E": "#4B84FF",  # 活塞红 → 亮蓝
-    "#002D62": "#FDBB30",  # 步行者深蓝 → 金黄
-    "#00471B": "#EEE1C6",  # 雄鹿深绿 → 米色
-    "#E03A3E": "#FF6B6B",  # 老鹰红 → 亮红
-    "#98002E": "#F9A01B",  # 热火红 → 金黄
-    "#0077C0": "#C4CED4",  # 魔术蓝 → 银
-    "#002B5C": "#FE2C19",  # 奇才深蓝 → 红
-    "#5D76A9": "#FDBB30",  # 黄蜂/灰熊蓝 → 金黄
-    "#1D1160": "#00788C",  # 黄蜂深紫 → 青
-
-    # ---------- 西部 ----------
-    "#0E2240": "#FEC524",  # 掘金深蓝 → 金黄
-    "#1D428A": "#FFC72C",  # 勇士蓝 → 金黄
-    "#5A2D81": "#8E54C0",  # 国王紫 → 亮紫
-    "#552A83": "#FDB927",  # 湖人紫 → 金黄
-    "#0C2340": "#78BE20",  # 森林狼/鹈鹕深蓝 → 亮绿
-    "#00538C": "#B8C4CA",  # 独行侠深蓝 → 银
-    "#E56020": "#FF8C42",  # 太阳橙 → 亮橙
-    "#007AC1": "#EF3B24",  # 雷霆蓝 → 橙红
-    "#C4CED4": "#C4CED4",  # 马刺银 → 银
-}
+# 按顺序分配的三种颜色（深色/浅色模式下都清晰）
+PLAYER_COLORS = ["#FF4B4B", "#4B84FF", "#319A44"]  # 红、蓝、绿
 
 
 def create_radar_chart(players_stats, dark_mode=True):
-    # 只保留会用到的颜色变量
+    # 坐标轴配色（保留原来逻辑，用于 CSS 注入）
     axis_name_color = "#E0E6F0" if dark_mode else "#262730"
-    split_line_color = "#4A5570" if dark_mode else "#CCCCCC"
 
     schema = [
         {"name": "得分", "max": 27},
@@ -53,7 +24,6 @@ def create_radar_chart(players_stats, dark_mode=True):
     ]
 
     radar = Radar(init_opts=opts.InitOpts(width="100%", height="600px"))
-    # ⚠️ 只保留基础参数，兼容老版本 pyecharts
     radar.add_schema(
         schema=schema,
         shape="circle",
@@ -61,24 +31,22 @@ def create_radar_chart(players_stats, dark_mode=True):
         radius="60%",
     )
 
-    for player in players_stats:
+    # 按顺序分配颜色
+    for idx, player in enumerate(players_stats):
         values = [
             player['PTS'], player['REB'], player['AST'],
             player['STL'], player['BLK'], player['3PM'],
             player['FG%'], player['FT%'], player['TOV'], player['MIN']
         ]
-        color = player.get('team_color', '#1D428A')
-
-        # 深色模式下，把太暗的球队色替换成亮色
-        if dark_mode and color in TEAM_COLOR_DARK:
-            color = TEAM_COLOR_DARK[color]
+        # 循环使用三种颜色（虽然最多3人，但保险起见用取模）
+        color = PLAYER_COLORS[idx % len(PLAYER_COLORS)]
 
         radar.add(
             series_name=player['name'],
             data=[values],
             color=color,
             linestyle_opts=opts.LineStyleOpts(width=2),
-            areastyle_opts=opts.AreaStyleOpts(opacity=0.3)
+            areastyle_opts=opts.AreaStyleOpts(opacity=0.25)
         )
 
     radar.set_global_opts(
@@ -94,11 +62,10 @@ def create_radar_chart(players_stats, dark_mode=True):
     output_file = "player_radar_chart.html"
     radar.render(output_file)
 
-    # ---------- 注入移动端适配 + 颜色强制覆盖 ----------
+    # ---------- 注入移动端适配 + 文字颜色 ----------
     with open(output_file, 'r', encoding='utf-8') as f:
         html = f.read()
 
-    # 用 f-string 注入动态颜色
     mobile_patch = f'''
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
@@ -108,18 +75,13 @@ def create_radar_chart(players_stats, dark_mode=True):
             width: 100% !important;
             overflow-x: hidden !important;
         }}
-        /* 图表容器撑满 */
         #main, .chart-container, div[_echarts_instance_] {{
             width: 100% !important;
             margin: 0 auto !important;
         }}
-        /* 强制雷达图所有文字颜色（维度名称、刻度数字、图例） */
+        /* 强制雷达图所有文字颜色 */
         svg text {{
             fill: {axis_name_color} !important;
-        }}
-        /* 网格线颜色 */
-        svg line {{
-            stroke: {split_line_color} !important;
         }}
     </style>
     '''

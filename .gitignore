@@ -5,4 +5,3 @@ __pycache__/
 .streamlit/secrets.toml
 player_radar_chart.html
 .DS_Store
-photos/

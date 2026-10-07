@@ -8,16 +8,6 @@ IS_PLAYOFF = True
 PAGE_SIZE = 100
 MIN_GAMES = 4  # 季后赛至少出场4场，过滤边缘球员
 
-TEAM_COLORS = {
-    "ATL": "#E03A3E", "BOS": "#007A33", "BRK": "#000000", "CHA": "#1D1160",
-    "CHI": "#CE1141", "CLE": "#860038", "DAL": "#00538C", "DEN": "#0E2240",
-    "DET": "#C8102E", "GSW": "#1D428A", "HOU": "#CE1141", "IND": "#002D62",
-    "LAC": "#C8102E", "LAL": "#552A83", "MEM": "#5D76A9", "MIA": "#98002E",
-    "MIL": "#00471B", "MIN": "#0C2340", "NOP": "#0C2340", "NYK": "#F58426",
-    "OKC": "#007AC1", "ORL": "#0077C0", "PHI": "#006BB6", "PHO": "#E56020",
-    "POR": "#E03A3E", "SAC": "#5A2D81", "SAS": "#C4CED4", "TOR": "#CE1141",
-    "UTA": "#002B5C", "WAS": "#002B5C",
-}
 
 def fetch_all_pages(endpoint, params):
     all_data = []
@@ -88,7 +78,6 @@ def main():
             'FT%': round(p.get('ftPercent', 0) * 100, 1) if p.get('ftPercent') else 0,
             'TOV': per_game('turnovers'),
             'MIN': per_game('minutesPg'),   # 用总计除以场次
-            'team_color': TEAM_COLORS.get(p.get('team', ''), '#888888'),
             'team': p.get('team', ''),
             'championships': '',      # 需要手动补充
         })

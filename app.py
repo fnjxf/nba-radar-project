@@ -344,11 +344,11 @@ if st.session_state.get("radar_html"):
     with col_right:
         st.subheader("🏆 球员信息")
         for player in players_stats:
-            #photo_path = os.path.join('photos', season_used, f"{player['name']}.png")
-            #if os.path.exists(photo_path):
-                #st.image(photo_path, width=450)
-            #else:
-                #st.image("https://via.placeholder.com/120?text=No+Photo", width=120)
+            photo_path = os.path.join('photos', season_used, f"{player['name']}.png")
+            if os.path.exists(photo_path):
+                st.image(photo_path, width=450)
+            else:
+                st.image("https://via.placeholder.com/120?text=No+Photo", width=120)
 
             st.markdown(f"**{player['name']}**")
 

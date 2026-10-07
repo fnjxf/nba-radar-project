@@ -24,6 +24,5 @@ def get_playoff_stats(player_name, season='2022-23'):
         'FT%': row['FT%'],
         'TOV': row['TOV'],
         'MIN': row['MIN'],
-        'team_color': row['team_color'],
         'championships': row['championships'],   # 新增
     }
