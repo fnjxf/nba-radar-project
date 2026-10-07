@@ -12,7 +12,18 @@ if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = False
 
 dark_mode = st.sidebar.toggle("深色/浅色模式切换", value=st.session_state.dark_mode)
+theme_changed = dark_mode != st.session_state.dark_mode
 st.session_state.dark_mode = dark_mode
+
+# 主题改变且已有雷达图 → 用新配色自动重新生成
+if theme_changed and st.session_state.get("radar_players"):
+    with st.spinner("正在更新雷达图配色..."):
+        html_file = create_radar_chart(
+            st.session_state.radar_players,
+            dark_mode=dark_mode
+        )
+        with open(html_file, 'r', encoding='utf-8') as f:
+            st.session_state.radar_html = f.read()
 
 if dark_mode:
     bg, text, sidebar_bg, card_bg, divider = "#0E1117", "#FAFAFA", "#1E2530", "#1A2035", "#2A3050"
@@ -137,6 +148,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# 球队缩写 → 中文名（用于筛选器显示）
+TEAM_ABBR_TO_NAME = {
+    "ATL": "老鹰", "BOS": "凯尔特人", "BRK": "篮网", "BKN": "篮网",
+    "CHA": "黄蜂", "CHI": "公牛", "CLE": "骑士", "DAL": "独行侠",
+    "DEN": "掘金", "DET": "活塞", "GSW": "勇士", "HOU": "火箭",
+    "IND": "步行者", "LAC": "快船", "LAL": "湖人", "MEM": "灰熊",
+    "MIA": "热火", "MIL": "雄鹿", "MIN": "森林狼", "NOP": "鹈鹕",
+    "NYK": "尼克斯", "OKC": "雷霆", "ORL": "魔术", "PHI": "76人",
+    "PHO": "太阳", "PHX": "太阳", "POR": "开拓者", "SAC": "国王",
+    "SAS": "马刺", "TOR": "猛龙", "UTA": "爵士", "WAS": "奇才",
+}
+
 # ---------- 读取球员列表 ----------
 @st.cache_data
 def load_player_list(season, sort_by_name=False):
@@ -168,29 +191,71 @@ st.session_state.sort_by_name = sort_by_name
 # 加载球员列表（按新排序）
 player_list = load_player_list(season, sort_by_name)
 
+# 加载球队分组映射（用于筛选）
+@st.cache_data
+def load_team_map(season):
+    csv_path = f'data/player_stats_playoffs_{season}.csv'
+    try:
+        df = pd.read_csv(csv_path)
+        return df.groupby('team')['name'].apply(list).to_dict()
+    except FileNotFoundError:
+        return {}
+
+team_map = load_team_map(season)   # {球队缩写: [球员名列表]}
+
 # 过滤保存的选择（只保留在 player_list 中的球员）
 valid_saved = [p for p in st.session_state.saved_players if p in player_list]
 
-# 如果排序改变，强制刷新 multiselect 的 widget 状态
+# ---------- 按球队筛选 ----------
+if "team_filter_widget" not in st.session_state:
+    st.session_state.team_filter_widget = []
+if "last_team_filter" not in st.session_state:
+    st.session_state.last_team_filter = []
+
+st.sidebar.subheader("🏀 按球队筛选")
+team_filter = st.sidebar.multiselect(
+    "留空显示全部球员",
+    options=sorted(team_map.keys()),
+    format_func=lambda x: f"{TEAM_ABBR_TO_NAME.get(x, x)} ({x})",
+    key="team_filter_widget",
+)
+team_filter_changed = team_filter != st.session_state.last_team_filter
+st.session_state.last_team_filter = team_filter
+
+# ---------- 根据筛选计算可选的球员列表 ----------
+if team_filter:
+    filtered_players = []
+    for t in team_filter:
+        filtered_players.extend(team_map.get(t, []))
+    if sort_by_name:
+        filtered_players = sorted(filtered_players)
+else:
+    filtered_players = player_list  # 全部
+
+# 已选球员中，属于当前赛季的（防止切赛季后残留无效名）
+valid_saved = [p for p in st.session_state.saved_players if p in player_list]
+
+# 最终选项 = 筛选结果 + 已选球员（保证已选项不消失）
+options_final = list(dict.fromkeys(filtered_players + valid_saved))
+
+# ---------- 球员选择 ----------
 WIDGET_KEY = "player_selector"
-# 记录上一次的赛季
 if "last_season" not in st.session_state:
     st.session_state.last_season = season
 season_changed = season != st.session_state.last_season
 st.session_state.last_season = season
 
-# 如果排序或赛季改变，刷新 widget
-if sort_changed or season_changed or WIDGET_KEY not in st.session_state:
+if (sort_changed or season_changed or team_filter_changed
+        or WIDGET_KEY not in st.session_state):
     st.session_state[WIDGET_KEY] = valid_saved
 
 st.sidebar.header("选择球员")
 selected_players = st.sidebar.multiselect(
-    "请选择球员（最多同时对比3人，否则图会太密）",
-    options=player_list,
+    "请选择球员（最多同时对比3人）",
+    options=options_final,
     key=WIDGET_KEY,
 )
 
-# 保存当前选择
 st.session_state.saved_players = selected_players
 
 if len(selected_players) > 3:
@@ -213,7 +278,7 @@ if st.sidebar.button("生成雷达图"):
                     st.error(f"未找到 {name} 在 {season} 的数据，已跳过")
 
             if players_stats:
-                html_file = create_radar_chart(players_stats)
+                html_file = create_radar_chart(players_stats, dark_mode=st.session_state.dark_mode)
                 with open(html_file, 'r', encoding='utf-8') as f:
                     html_content = f.read()
                 # 保存到 session_state，切换主题时不丢失
@@ -225,6 +290,33 @@ if st.sidebar.button("生成雷达图"):
                 st.error("没有有效数据，请检查球员名称或赛季")
                 st.session_state.radar_html = None
                 st.session_state.radar_players = None
+
+# ---------- 首页：未生成雷达图时，显示球员列表 ----------
+if not st.session_state.get("radar_html"):
+    st.info("免责声明：本网站只列举所有参加季后赛至少4场的球员，上场场次不足的未被计入统计")
+
+    # 加载当前赛季所有球员数据
+    try:
+        df = pd.read_csv(f'data/player_stats_playoffs_{season}.csv')
+    except FileNotFoundError:
+        st.warning(f"未找到 {season} 赛季数据文件")
+        df = None
+
+    if df is not None and not df.empty:
+        st.subheader(f"📋 {season} 赛季季后赛出场球员名单（按球队分组）")
+
+        # 按球队分组
+        teams = df.groupby('team')['name'].apply(list).to_dict()
+
+        # 每个球队一个可折叠区块
+        for team_name in sorted(teams.keys()):
+            players_in_team = teams[team_name]
+            with st.expander(f"🏀 {team_name}（{len(players_in_team)} 人）", expanded=False):
+                # 每行显示 4 个球员
+                cols = st.columns(4)
+                for i, pname in enumerate(players_in_team):
+                    with cols[i % 4]:
+                        st.markdown(f"- {pname}")
 
 # ---------- 显示雷达图和球员信息（无论何时，只要 session_state 有数据就显示） ----------
 if st.session_state.get("radar_html"):

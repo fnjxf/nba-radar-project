@@ -89,6 +89,7 @@ def main():
             'TOV': per_game('turnovers'),
             'MIN': per_game('minutesPg'),   # 用总计除以场次
             'team_color': TEAM_COLORS.get(p.get('team', ''), '#888888'),
+            'team': p.get('team', ''),
             'championships': '',      # 需要手动补充
         })
     
