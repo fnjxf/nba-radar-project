@@ -17,8 +17,8 @@
 
 ## 🖼️ 效果预览
 
-<img src="screenshot-pc.png" alt="电脑端界面预览" style="height: 400px;" />
-<img src="screenshot-mobile.png" alt="手机端界面预览" style="height: 400px;" />
+<img src="screenshot-pc.png" alt="电脑端界面预览" style="height: 300px;" />
+<img src="screenshot-mobile.png" alt="手机端界面预览" style="height: 300px;" />
 
 ## 🚀 使用说明
 
