@@ -420,16 +420,20 @@ def main():
                 else:
                     st.image("https://placehold.co/120?text=No+Photo", width=120)
 
-                st.markdown(f"**{player['name']}**")
-                # 球队中文全称，显示在球员名下方
+                                # 球员名 + 球队中文全称（合并为同一 markdown 块，避免块间距问题）
                 _team = player.get('team', '')
-                if _team:
-                    _team_full = TEAM_ABBR_TO_FULLNAME.get(_team, _team)
+                _team_full = TEAM_ABBR_TO_FULLNAME.get(_team, _team) if _team else ''
+                if _team_full:
                     st.markdown(
-                        f"<div style='color:{muted}; font-size:0.95em; margin-top:-12px;'>"
-                        f"{_team_full}</div>",
+                        f"<div style='line-height:1.4;'>"
+                        f"<span style='font-weight:700; font-size:1.05em;'>{player['name']}</span><br>"
+                        f"<span style='color:{muted}; font-size:0.9em;'>{_team_full}</span>"
+                        f"</div>",
                         unsafe_allow_html=True,
                     )
+                else:
+                    st.markdown(f"**{player['name']}**")
+
 
                 champ_str = player.get('championships', '')
                 parsed = parse_championships(champ_str)
