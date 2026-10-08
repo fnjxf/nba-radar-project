@@ -178,6 +178,21 @@ def main():
         "SAS": "马刺", "TOR": "猛龙", "UTA": "爵士", "WAS": "奇才",
     }
 
+    # 球队缩写 → 中文全称（用于球员信息栏展示，如"金州勇士"）
+    TEAM_ABBR_TO_FULLNAME = {
+        "ATL": "亚特兰大老鹰", "BOS": "波士顿凯尔特人", "BRK": "布鲁克林篮网",
+        "BKN": "布鲁克林篮网", "CHA": "夏洛特黄蜂", "CHI": "芝加哥公牛",
+        "CLE": "克利夫兰骑士", "DAL": "达拉斯独行侠", "DEN": "丹佛掘金",
+        "DET": "底特律活塞", "GSW": "金州勇士", "HOU": "休斯顿火箭",
+        "IND": "印第安纳步行者", "LAC": "洛杉矶快船", "LAL": "洛杉矶湖人",
+        "MEM": "孟菲斯灰熊", "MIA": "迈阿密热火", "MIL": "密尔沃基雄鹿",
+        "MIN": "明尼苏达森林狼", "NOP": "新奥尔良鹈鹕", "NYK": "纽约尼克斯",
+        "OKC": "俄克拉荷马城雷霆", "ORL": "奥兰多魔术", "PHI": "费城76人",
+        "PHO": "菲尼克斯太阳", "PHX": "菲尼克斯太阳", "POR": "波特兰开拓者",
+        "SAC": "萨克拉门托国王", "SAS": "圣安东尼奥马刺", "TOR": "多伦多猛龙",
+        "UTA": "犹他爵士", "WAS": "华盛顿奇才",
+    }
+
     # ---------- 读取球员列表 ----------
     @st.cache_data
     def load_player_list(season, sort_by_name=False):
@@ -394,6 +409,15 @@ def main():
                     st.image("https://placehold.co/120?text=No+Photo", width=120)
 
                 st.markdown(f"**{player['name']}**")
+                # 球队中文全称，显示在球员名下方
+                _team = player.get('team', '')
+                if _team:
+                    _team_full = TEAM_ABBR_TO_FULLNAME.get(_team, _team)
+                    st.markdown(
+                        f"<div style='color:{muted}; font-size:0.95em; margin-top:-12px;'>"
+                        f"{_team_full}</div>",
+                        unsafe_allow_html=True,
+                    )
 
                 champ_str = player.get('championships', '')
                 parsed = parse_championships(champ_str)

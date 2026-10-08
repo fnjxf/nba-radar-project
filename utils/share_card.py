@@ -217,10 +217,21 @@ def create_share_card(players_stats, season, dark_mode=True):
         d.text((140, y + chip_h / 2 - 6), str(p["name"]),
                font=_FL(30), fill=TEXT, anchor="lm")
 
-        team = p.get("team", "")
-        d.text((430, y + chip_h / 2 - 6),
-               f"{TEAM_CN.get(team, team)} · {team}",
-               font=_F(22), fill=MUTED, anchor="lm")
+        # 队名紧跟在球员名后面（动态定位，避免长名字重叠）
+        team = p.get("team", "") or ""
+        if team:
+            team_txt = f"{TEAM_CN.get(team, team)} · {team}"
+            name_w = d.textlength(str(p["name"]), font=_FL(30))
+            stats_txt = (f"得分 {float(p['PTS']):.1f}   "
+                         f"篮板 {float(p['REB']):.1f}   "
+                         f"助攻 {float(p['AST']):.1f}")
+            stats_w = d.textlength(stats_txt, font=_F(24))
+            stats_left = W - 100 - stats_w          # 右侧统计的实际起点
+            tx = 140 + name_w + 16
+            team_w = d.textlength(team_txt, font=_F(22))
+            if tx + team_w + 12 < stats_left:       # 首尾都放得下才画
+                d.text((tx, y + chip_h / 2 - 6),
+                       team_txt, font=_F(22), fill=MUTED, anchor="lm")
 
         stat_line = (f"得分 {float(p['PTS']):.1f}   "
                      f"篮板 {float(p['REB']):.1f}   "

@@ -24,5 +24,6 @@ def get_playoff_stats(player_name, season='2022-23'):
         'FT%': row['FT%'],
         'TOV': row['TOV'],
         'MIN': row['MIN'],
+        'team': row['team'] if 'team' in row.index else '',
         'championships': row['championships'] if 'championships' in row.index else '',
     }
