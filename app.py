@@ -191,7 +191,7 @@ def main():
         except FileNotFoundError:
             return []
 
-    season = st.sidebar.selectbox("选择赛季", ["2022-23", "2023-24"], index=0)
+    season = st.sidebar.selectbox("选择赛季", ["2022-23", "2023-24", "2024-25"], index=0)
 
     # 初始化：记录排序状态和已选球员
     if "sort_by_name" not in st.session_state:
