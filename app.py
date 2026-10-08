@@ -21,6 +21,18 @@ except Exception:
 
 def main():
 
+    # ---------- 版本角标（侧边栏底部显示当前 commit，用于确认线上部署版本）----------
+    def _build_tag():
+        try:
+            import subprocess
+            out = subprocess.check_output(
+                ['git', 'rev-parse', '--short', 'HEAD'],
+                stderr=subprocess.DEVNULL, text=True,
+            ).strip()
+            return out or 'unknown'
+        except Exception:
+            return 'unknown'
+
     # ---------- 主题切换 ----------
     if "dark_mode" not in st.session_state:
         st.session_state.dark_mode = False
@@ -437,6 +449,9 @@ def main():
                     st.markdown(f"<div style='color:{muted};'>无总冠军</div>", unsafe_allow_html=True)
 
                 st.markdown("---")
+
+    # ---------- 侧边栏底部：版本角标 ----------
+    st.sidebar.caption(f"build {_build_tag()}")
 
 
 with sa2.track(save_to_json="analytics.json",
