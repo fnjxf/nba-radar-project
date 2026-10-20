@@ -539,7 +539,7 @@ def main():
                             label = f"{year} NBA CHAMPION · FMVP"
                         elif is_cur:
                             # 当季冠军：金色渐变底 + 暖白字
-                            cls, star = "champ-row champ-cur", "⭐ "
+                            cls, star = "champ-row champ-cur", ""
                             label = f"{year} NBA CHAMPION"
                         elif is_fmvp:
                             # 历史 FMVP：暗金底 + 暗金字（不用鎏金——浅色底上会看不清）
