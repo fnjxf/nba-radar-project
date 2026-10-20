@@ -55,10 +55,17 @@ def main():
         bg, text, sidebar_bg, card_bg, divider = "#0E1117", "#FAFAFA", "#1E2530", "#1A2035", "#2A3050"
         btn_bg, btn_text, btn_border = "#1E2530", "#FAFAFA", "#4A5570"
         muted = "#888888"
+        # 冠军徽章：历史（非当季）配色
+        hist_bg, hist_fg, hist_border = "#23262E", "#9AA1AE", "#3A404C"
+        hist_fmvp_bg, hist_fmvp_fg, hist_fmvp_border = "#2A2519", "#B49A55", "#6B5A2A"
+        gold_shadow = "rgba(0,0,0,.4)"
     else:
         bg, text, sidebar_bg, card_bg, divider = "#FFFFFF", "#262730", "#F0F2F6", "#FFFFFF", "#E0E0E0"
         btn_bg, btn_text, btn_border = "#FFFFFF", "#262730", "#CCCCCC"
         muted = "#666666"
+        hist_bg, hist_fg, hist_border = "#EDEEF1", "#7C838F", "#C2C6CE"
+        hist_fmvp_bg, hist_fmvp_fg, hist_fmvp_border = "#F2EDDF", "#8A7238", "#C4A96A"
+        gold_shadow = "rgba(255,255,255,.7)"
 
     st.markdown(f"""
     <style>
@@ -147,6 +154,67 @@ def main():
                 width: 100% !important;
                 min-width: 100% !important;
             }}
+        }}
+
+        /* ---------- 冠军 / FMVP 徽章 ---------- */
+        .champ-row {{
+            display: inline-flex;
+            align-items: center;
+            font-size: 12.5px;
+            font-weight: 600;
+            padding: 4px 10px;
+            margin: 2px 0;
+            border-radius: 5px;
+            line-height: 1.3;
+            letter-spacing: .2px;
+            white-space: nowrap;
+        }}
+        /* 当季冠军：金色渐变底 + 暖白字 */
+        .champ-row.champ-cur {{
+            background: linear-gradient(135deg, #7A5C12 0%, #A8821E 50%, #6B4E0E 100%);
+            color: #FDF6E3;
+            border-left: 3px solid #F0C75E;
+            box-shadow: 0 0 10px rgba(240, 199, 94, .22);
+        }}
+        /* 当季 FMVP：更深金底 + 鎏金字 */
+        .champ-row.champ-cur-fmvp {{
+            background: linear-gradient(135deg, #3A2A06, #5A4410);
+            border-left: 3px solid #F0C75E;
+            box-shadow: 0 0 14px rgba(240, 199, 94, .30);
+        }}
+        /* 历史冠军：灰色暗底 */
+        .champ-row.champ-hist {{
+            background: {hist_bg};
+            color: {hist_fg};
+            border-left: 3px solid {hist_border};
+        }}
+        /* 历史 FMVP：暗金底 + 暗金字 */
+        .champ-row.champ-hist-fmvp {{
+            background: {hist_fmvp_bg};
+            color: {hist_fmvp_fg};
+            border-left: 3px solid {hist_fmvp_border};
+        }}
+
+        /* 鎏金文字（FMVP 专用） */
+        .gold-text {{
+            background: linear-gradient(100deg,
+                #8B6508 0%, #F7E27C 18%, #FFFDF0 32%, #E8C34A 48%,
+                #A8791A 65%, #FFF3C4 82%, #C9A227 100%);
+            background-size: 220% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent !important;
+            -webkit-text-fill-color: transparent !important;
+            filter: drop-shadow(0 1px 0 {gold_shadow});
+            animation: goldShine 6s linear infinite;
+        }}
+        @keyframes goldShine {{
+            from {{ background-position: 0% 50%; }}
+            to   {{ background-position: 200% 50%; }}
+        }}
+        /* 减弱动效偏好时停止扫光 */
+        @media (prefers-reduced-motion: reduce) {{
+            .gold-text {{ animation: none; }}
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -367,15 +435,38 @@ def main():
     # ---------- 显示雷达图和球员信息（无论何时，只要 session_state 有数据就显示） ----------
     if st.session_state.get("radar_html"):
         def parse_championships(champ_str):
+            """解析冠军字段 → [(年份, 是否FMVP), ...]
+
+            同一年如果既有冠军又有 FMVP，只保留 FMVP 那条
+            （FMVP 本身就代表夺冠，不必再单独列一行冠军）。
+            """
             if not champ_str or pd.isna(champ_str):
                 return []
-            result = []
+            fmvp_years, plain_years = set(), []
             for item in str(champ_str).split(','):
                 item = item.strip()
+                if not item:
+                    continue
                 is_fmvp = '(FMVP)' in item
                 year = item.replace('(FMVP)', '').strip()
-                result.append((year, is_fmvp))
+                if not year:
+                    continue
+                if is_fmvp:
+                    fmvp_years.add(year)
+                else:
+                    plain_years.append(year)
+            result = [(y, True) for y in fmvp_years]
+            result += [(y, False) for y in plain_years if y not in fmvp_years]
+            # 年份倒序（新的在前），FMVP 优先
+            result.sort(key=lambda t: (-int(t[0]) if t[0].isdigit() else 0, not t[1]))
             return result
+
+        def current_season_year(season):
+            """'2024-25' → '2025'（当赛季的夺冠年份）"""
+            try:
+                return str(2000 + int(str(season).split('-')[-1]))
+            except Exception:
+                return ''
 
         html_content = st.session_state.radar_html
         players_stats = st.session_state.radar_players
@@ -438,15 +529,29 @@ def main():
                 champ_str = player.get('championships', '')
                 parsed = parse_championships(champ_str)
                 if parsed:
-                    html = "<div style='line-height:1.8;'>"
+                    _cur_year = current_season_year(season_used)
+                    html = "<div style='line-height:1.75;'>"
                     for year, is_fmvp in parsed:
-                        if is_fmvp:
-                            star = "🌟"
-                            style = "color:#FFD700; background:#E31B23; border-radius:4px; padding:0 4px; font-weight:bold;"
+                        is_cur = (year == _cur_year)
+                        if is_cur and is_fmvp:
+                            # 当季 FMVP：暗金底 + 鎏金字
+                            cls, star = "champ-row champ-cur-fmvp", ""
+                            label = f"{year} NBA CHAMPION · FMVP"
+                        elif is_cur:
+                            # 当季冠军：金色渐变底 + 暖白字
+                            cls, star = "champ-row champ-cur", "⭐ "
+                            label = f"{year} NBA CHAMPION"
+                        elif is_fmvp:
+                            # 历史 FMVP：暗金底 + 暗金字（不用鎏金——浅色底上会看不清）
+                            cls, star = "champ-row champ-hist-fmvp", ""
+                            label = f"{year} NBA CHAMPION · FMVP"
                         else:
-                            star = "⭐"
-                            style = "color:gold;"
-                        html += f'<div style="{style}">{star} {year} NBA CHAMPION</div>'
+                            # 历史冠军：灰色暗底
+                            cls, star = "champ-row champ-hist", ""
+                            label = f"{year} NBA CHAMPION"
+                        inner = (f'<span class="gold-text">{label}</span>'
+                                 if (is_cur and is_fmvp) else label)
+                        html += f'<div class="{cls}">{star}{inner}</div>'
                     html += "</div>"
                     st.markdown(html, unsafe_allow_html=True)
                 else:
