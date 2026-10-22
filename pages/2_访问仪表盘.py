@@ -45,7 +45,14 @@ RANGE_OPTIONS = {
 # --------------------------------------------------------------------------
 
 def _check_password() -> bool:
-    """密码保护。未配置 analytics_password 时直接放行（仅建议本地这样用）。"""
+    """密码保护。三种情况放行：
+    1. 主站侧边栏已开启管理员模式（is_admin）
+    2. 本页直接输对密码
+    3. 未配置 analytics_password（仅建议本地这样用）
+    """
+    if st.session_state.get("is_admin"):
+        return True
+
     try:
         expected = st.secrets.get("analytics_password", None)
     except Exception:

@@ -570,6 +570,30 @@ def main():
 
                 st.markdown("---")
 
+    # ---------- 侧边栏底部：管理员模式 ----------
+    with st.sidebar:
+        st.divider()
+        if st.session_state.get("is_admin"):
+            st.success("管理员模式已开启")
+            st.page_link("pages/2_访问仪表盘.py", label="📊 打开访问仪表盘")
+            if st.button("退出管理员模式", width="stretch"):
+                st.session_state.is_admin = False
+                st.rerun()
+        else:
+            with st.expander("🔐 管理员入口"):
+                if not _analytics_password:
+                    st.caption("未配置管理员密码。请在 Secrets 中设置 "
+                               "`analytics_password` 后使用。")
+                else:
+                    admin_pwd = st.text_input("管理员密码", type="password",
+                                              key="_admin_pwd")
+                    if st.button("登录", width="stretch", key="_admin_login"):
+                        if admin_pwd == _analytics_password:
+                            st.session_state.is_admin = True
+                            st.rerun()
+                        else:
+                            st.error("密码不对")
+
     # ---------- 侧边栏底部：版本角标 ----------
     st.sidebar.caption(f"build {_build_tag()}")
 
