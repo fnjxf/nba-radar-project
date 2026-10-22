@@ -398,7 +398,15 @@ def main():
                     st.session_state.radar_html = html_content
                     st.session_state.radar_players = players_stats
                     st.session_state.radar_season = season
-                    st.session_state.share_card_bytes = None 
+                    st.session_state.share_card_bytes = None
+
+                    # 埋点：记录本次查看的赛季与球员（仪表盘的热门排行用）
+                    sa2.event(
+                        "查看雷达图",
+                        season=season,
+                        players=", ".join(p['name'] for p in players_stats),
+                        count=len(players_stats),
+                    )
                     st.success("生成成功！")
                 else:
                     st.error("没有有效数据，请检查球员名称或赛季")
@@ -488,6 +496,9 @@ def main():
                     )
                     with open(out_path, 'rb') as f:
                         st.session_state.share_card_bytes = f.read()
+                    # 埋点：分享卡片生成次数
+                    sa2.event("生成分享卡片", season=season_used,
+                              count=len(players_stats))
                 # 生成后立即刷新，让下方预览/下载按钮出现
                 st.rerun()
 
@@ -563,6 +574,18 @@ def main():
     st.sidebar.caption(f"build {_build_tag()}")
 
 
-with sa2.track(save_to_json="analytics.json",
-                unsafe_password=_analytics_password):
+# ---------- 访问统计存储 ----------
+# 配了 supabase_url / supabase_key 就写 Supabase（重启不丢），
+# 没配就退回本地 JSONL（本地开发够用，云端重启会清空）。
+from utils.analytics_store import build_store
+
+try:
+    _analytics_store = build_store(st.secrets)
+except Exception as _exc:  # 存储初始化失败不应拖垮主站
+    _analytics_store = None
+    st.sidebar.warning(f"统计存储初始化失败，已停用：{_exc}")
+
+
+with sa2.track(store=_analytics_store,
+               unsafe_password=_analytics_password):
     main()
