@@ -71,6 +71,8 @@ def main():
     <style>
         .stApp {{ background-color: {bg}; color: {text}; }}
         section[data-testid="stSidebar"] {{ background-color: {sidebar_bg}; }}
+        /* 隐藏自动页面导航：进仪表盘统一走侧边栏底部的管理员入口 */
+        [data-testid="stSidebarNav"] {{ display: none !important; }}
         .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
         .stApp p, .stApp label {{ color: {text} !important; }}
         hr {{ border-color: {divider} !important; }}

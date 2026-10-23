@@ -27,6 +27,21 @@ from utils.analytics_store import build_store, store_label
 
 st.set_page_config(page_title="访问仪表盘", page_icon="📊", layout="wide")
 
+# 隐藏自动页面导航（app.py 里的样式只作用于主页，这里要再注一次）
+st.markdown(
+    "<style>[data-testid='stSidebarNav']{display:none !important;}</style>",
+    unsafe_allow_html=True,
+)
+
+# 侧边栏：返回主页 + 管理员状态（与主站共享 session_state）
+with st.sidebar:
+    st.page_link("app.py", label="⬅ 返回主页")
+    if st.session_state.get("is_admin"):
+        st.caption("管理员模式已开启")
+        if st.button("退出管理员模式", width="stretch"):
+            st.session_state.is_admin = False
+            st.rerun()
+
 # 与 sa2 内置图表同一套配色，视觉上统一
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100",
           "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
