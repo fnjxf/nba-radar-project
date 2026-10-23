@@ -2,17 +2,19 @@
 """
 进站声明弹窗：首次访问时显示，说明照片补全进度并引导去项目详情页。
 
-「不再显示」的持久化用浏览器 cookie 实现（session_state 只在当前会话有效，
-刷新/重开会话就没了，而 Streamlit 服务端又摸不到 localStorage，
-cookie 是唯一一个「JS 能写、服务端能读」的媒介）。
+「不再显示」的记忆完全放在浏览器端（localStorage）：
+
+- 服务端每次 rerun 照常渲染弹窗；页面里注入一个不可见的常驻脚本，
+  它发现 localStorage 里的静默期未到，就把弹窗 DOM 隐藏掉。
+- 为什么不走 cookie？Streamlit Cloud 的服务端经代理读 cookie
+  存在不可靠的情况（本地正常、云端读不到，真实踩坑），
+  而组件 iframe（allow-same-origin）可以稳定读写主页面同源的
+  localStorage 和 DOM，全程不依赖服务端配合。
 
 用法（app.py 中）：
     from utils.welcome_dialog import show_welcome_dialog
     show_welcome_dialog()
 """
-
-import datetime
-import time
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -29,35 +31,90 @@ _DISCLAIMER = """
 """
 
 _DIALOG_KEY = "welcome_dialog_shown"
-_COOKIE_NAME = "welcome_off_until"   # 存「不再显示」的截止时间（Unix 秒）
+_LS_KEY = "welcome_off_until"        # localStorage 键：静默截止时间（Unix 秒）
 
 
-def _snoozed() -> bool:
-    """浏览器是否选择了「一段时间内不再显示」且还没到期。"""
-    try:
-        raw = st.context.cookies.get(_COOKIE_NAME)
-    except Exception:
-        return False
-    if not raw:
-        return False
-    try:
-        return float(raw) > time.time()
-    except (TypeError, ValueError):
-        return False
+# --------------------------------------------------------------------------
+# 常驻脚本：渲染在主页面（隐藏弹窗 + 处理静默请求）
+# --------------------------------------------------------------------------
+
+_KEEPALIVE_SNIPPET = """
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const KEY = %(ls_key)s;
+
+  const active = () => {
+    try {
+      return parseFloat(localStorage.getItem(KEY) || "0") > Date.now() / 1000;
+    } catch (e) { return false; }
+  };
+
+  // 把当前页面上所有弹窗藏起来（静默期内）
+  const hideDialogs = () => {
+    if (!active()) return;
+    try {
+      const doc = (window.parent && window.parent.document) || document;
+      doc.querySelectorAll('[data-testid="stDialog"]')
+         .forEach(el => { el.style.display = "none"; });
+    } catch (e) {}
+  };
+
+  // 弹窗是 rerun 时重新渲染的，用 observer 持续盯住
+  try {
+    new MutationObserver(hideDialogs)
+        .observe(window.parent.document.body, { childList: true, subtree: true });
+  } catch (e) {}
+  hideDialogs();
+
+  // 监听器必须挂在顶层窗口上——弹窗按钮的 postMessage 发往
+  // window.parent（主页面），挂在自身 iframe 的 window 上收不到
+  try {
+    window.parent.addEventListener("message", (e) => {
+    const d = e.data || {};
+    if (d.type !== "welcome_snooze") return;
+    let secs = d.secs || 86400;
+    if (d.today) {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);          // 访客自己的午夜
+      secs = Math.floor((midnight - now) / 1000);
+    }
+    try {
+      localStorage.setItem(KEY, String(Date.now() / 1000 + secs));
+    } catch (e) { return; }
+    hideDialogs();
+    });
+  } catch (e) {}
+});
+</script>
+"""
 
 
-def _snooze_button(label: str, seconds: int):
-    """渲染一个「点了就写 cookie 并刷新页面」的按钮。
+def _render_keepalive():
+    """注入常驻脚本（不可见，每次 rerun 都在，保证 observer 活着）。"""
+    import json
+    components.html(
+        _KEEPALIVE_SNIPPET % {"ls_key": json.dumps(_LS_KEY)},
+        height=0,
+    )
 
-    必须用 JS 写 cookie：服务端无法主动给浏览器设 cookie
-    （st.context.cookies 是只读的）。写完刷新让服务端重新读。
+
+# --------------------------------------------------------------------------
+# 弹窗
+# --------------------------------------------------------------------------
+
+def _snooze_button(label: str, seconds: int, today: bool = False):
+    """弹窗里的静默按钮：postMessage 通知主页脚本写 localStorage。
+
+    today=True 时由主页脚本按访客本地时区计算「距今天午夜」的秒数
+    （服务器时区不可信——Streamlit Cloud 是 UTC，真实踩坑）。
     """
     components.html(
         f"""
         <script>
             // 组件源码只有裸 <script> 时会被解析进 <head>，此时 document.body
             // 还是 null，必须等 DOM 就绪再创建按钮
-            document.addEventListener("DOMContentLoaded", () => {{
+            document.addEventListener("DOMContentLoaded", function () {{
                 const btn = document.createElement("button");
                 btn.innerText = "{label}";
                 btn.style.cssText = "width:100%;padding:0.28rem 0.6rem;"
@@ -67,10 +124,12 @@ def _snooze_button(label: str, seconds: int):
                 btn.onmouseover = () => btn.style.borderColor = "rgba(128,128,128,0.9)";
                 btn.onmouseout  = () => btn.style.borderColor = "rgba(128,128,128,0.5)";
                 btn.onclick = () => {{
-                    const until = Math.floor(Date.now() / 1000) + {seconds};
-                    document.cookie = "{_COOKIE_NAME}=" + until
-                        + "; path=/; max-age={seconds}; SameSite=Lax";
-                    window.parent.location.reload();
+                    window.parent.postMessage(
+                        {{ type: "welcome_snooze", secs: {seconds}, today: {str(today).lower()} }},
+                        "*");
+                    btn.innerText = "✓ 已静默，本次弹窗已关闭";
+                    btn.disabled = true;
+                    btn.style.opacity = "0.6";
                 }};
                 document.body.appendChild(btn);
             }});
@@ -92,30 +151,27 @@ def _welcome_modal():
     st.caption("不想每次都看到它？选择一个静默期限：")
     c1, c2 = st.columns(2)
     with c1:
-        # 距离本地午夜还剩多少秒（今天 24 点失效）
-        _now = datetime.datetime.now()
-        _midnight = datetime.datetime.combine(
-            _now.date() + datetime.timedelta(days=1), datetime.time.min)
-        _snooze_button("今日不再显示",
-                       int((_midnight - _now).total_seconds()) + 5)
+        _snooze_button("今日不再显示", 86400, today=True)
     with c2:
         _snooze_button("本周不再显示（7 天）", 7 * 86400)
 
-    st.caption("选了静默期限后，到期或换浏览器/清除 Cookie 时会再次显示。")
+    st.caption("静默期限内刷新页面不会再出现；到期、换浏览器或清除"
+               "浏览器数据后会再次显示。")
 
 
 def show_welcome_dialog(force: bool = False):
     """显示欢迎弹窗。
 
-    - 每个浏览器会话最多一次
-    - 点过「今日/本周不再显示」后，在期限内不再出现（cookie 记忆）
-    - force=True 时强制显示
+    - 每个浏览器会话最多一次（「我知道了」按钮控制）
+    - 「今日/本周不再显示」由浏览器 localStorage 记忆，服务端无感
+    - force=True 时强制显示（不受静默影响）
     """
+    # 常驻脚本每次 rerun 都要注入，保证「静默期隐藏弹窗」的逻辑活着
+    _render_keepalive()
+
     if force:
         _welcome_modal()
         return
     if st.session_state.get(_DIALOG_KEY):
-        return
-    if _snoozed():
         return
     _welcome_modal()
