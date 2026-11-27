@@ -1,5 +1,6 @@
 # app.py
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import os
 import base64
@@ -52,7 +53,31 @@ except Exception:
 
 def main():
 
-    # ---------- 从球员名单点进来的直达链接（?player=...&season=...&dark=...） ----------
+    # ---------- 打开单个球员雷达图（统一入口：名单点击 / 分享链接直达） ----------
+    def _open_single_player(pname, pseason, pdark):
+        try:
+            _stats = get_playoff_stats(pname, pseason)
+            if _stats:
+                _html = create_radar_chart([_stats], dark_mode=pdark)
+                with open(_html, "r", encoding="utf-8") as _fh:
+                    st.session_state.radar_html = _fh.read()
+                st.session_state.radar_players = [_stats]
+                st.session_state.radar_season = pseason
+                st.session_state.share_card_bytes = None
+                return True
+        except Exception:
+            pass
+        return False
+
+    # (A) 名单点击：页面内切换，不刷新整页（B 方案，避免白屏）
+    _pending = st.session_state.pop("_pending_player", None)
+    if _pending:
+        _p_season = st.session_state.pop("_pending_season", "2022-23")
+        _p_dark = st.session_state.get("dark_mode", False)
+        _open_single_player(_pending, _p_season, _p_dark)
+        st.session_state.pop("_pending_season", None)
+
+    # (B) 分享链接直达（?player=...）：整页加载，保留兼容
     _qp = st.query_params
     if "player" in _qp:
         _deep_player = _qp["player"]
@@ -62,17 +87,7 @@ def main():
         st.session_state.season_select = _deep_season
         # 直达页面跳过进站弹窗（整页重载会新建会话，否则每次点球员都会弹）
         st.session_state[_WELCOME_KEY] = True
-        try:
-            _deep_stats = get_playoff_stats(_deep_player, _deep_season)
-            if _deep_stats:
-                _deep_html = create_radar_chart([_deep_stats], dark_mode=_deep_dark)
-                with open(_deep_html, "r", encoding="utf-8") as _fh:
-                    st.session_state.radar_html = _fh.read()
-                st.session_state.radar_players = [_deep_stats]
-                st.session_state.radar_season = _deep_season
-                st.session_state.share_card_bytes = None
-        except Exception:
-            pass
+        _open_single_player(_deep_player, _deep_season, _deep_dark)
         # 生成后清掉参数，避免后续 rerun 重复触发生成
         st.query_params.clear()
 
@@ -484,49 +499,90 @@ def main():
 
         if df is not None and not df.empty:
             st.subheader(f"📋 {season} 赛季季后赛出场球员名单（按球队分组）")
-            st.caption("悬停球员名看定妆照，点击直达该球员的雷达图")
+            st.caption("悬停球员名看定妆照，点击直达该球员的雷达图（页面内切换，无白屏）")
 
-            # 悬停卡片样式（只注入一次）
-            st.markdown("""
+            teams = df.groupby('team')['name'].apply(list).to_dict()
+
+            # (1) 隐藏按钮：每个球员一个，承载"页面内切换 + 传值"
+            #     iframe 内的卡片点击时，用 JS 触发对应序号的按钮
+            _ordered = []  # [(球队, 球员, 序号), ...]
+            _nav_idx = 0
+            for team_name in sorted(teams.keys()):
+                for pname in teams[team_name]:
+                    if st.button(f"NAV_{_nav_idx}", key=f"nav_{_nav_idx}"):
+                        st.session_state["_pending_player"] = pname
+                        st.session_state["_pending_season"] = season
+                        st.rerun()
+                    _ordered.append((team_name, pname, _nav_idx))
+                    _nav_idx += 1
+
+            # (2) 名单 iframe：悬停照片（CSS）+ 点击触发隐藏按钮（JS，不被 Streamlit 清洗）
+            _css = """
             <style>
-              .pl-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 10px;}
+              body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                color:__TEXT__;background:transparent;}
+              details{margin:4px 0;border-bottom:1px solid __DIVIDER__;}
+              summary{cursor:pointer;padding:7px 6px;font-weight:600;color:__TEXT__;list-style:none;}
+              summary::-webkit-details-marker{display:none;}
+              summary::before{content:'\\25B8';display:inline-block;margin-right:8px;transition:transform .15s;}
+              details[open] summary::before{transform:rotate(90deg);}
+              .pl-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px 10px;padding:4px 6px 10px;}
               .pl-cell{position:relative;min-width:0;}
-              .pl-link{display:inline-block;max-width:100%;overflow:hidden;
-                text-overflow:ellipsis;white-space:nowrap;color:inherit;
-                text-decoration:none;cursor:pointer;padding:2px 4px;border-radius:4px;}
-              .pl-link:hover{color:#FFC72C!important;background:rgba(255,199,44,.10);}
-              .pl-tip{display:none;position:absolute;left:50%;bottom:115%;
-                transform:translateX(-50%);z-index:99999;background:#141414;
-                border:1px solid #555;border-radius:10px;padding:6px;
+              .pl-link{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+                white-space:nowrap;color:__TEXT__;text-decoration:none;cursor:pointer;
+                padding:3px 5px;border-radius:4px;}
+              .pl-link:hover{color:#FFC72C!important;background:rgba(255,199,44,.12);}
+              .pl-tip{display:none;position:absolute;left:50%;top:118%;transform:translateX(-50%);
+                z-index:99999;background:#141414;border:1px solid #555;border-radius:10px;padding:6px;
                 box-shadow:0 10px 28px rgba(0,0,0,.5);}
               .pl-tip img{display:block;width:150px;border-radius:6px;}
               .pl-tip .no-photo{width:150px;height:60px;display:flex;align-items:center;
                 justify-content:center;color:#aaa;font-size:12px;}
               .pl-cell:hover .pl-tip{display:block;}
-              [data-testid="stExpander"] div[data-testid="stExpanderContent"]{overflow:visible!important;}
             </style>
-            """, unsafe_allow_html=True)
+            """.replace("__TEXT__", text).replace("__DIVIDER__", divider)
 
-            teams = df.groupby('team')['name'].apply(list).to_dict()
+            _details_html = []
             for team_name in sorted(teams.keys()):
-                players_in_team = teams[team_name]
-                with st.expander(f"🏀 {team_name}（{len(players_in_team)} 人）", expanded=False):
-                    cards = []
-                    for pname in players_in_team:
-                        photo = _find_player_photo(season, pname)
-                        if photo:
-                            b64 = _photo_thumb_data_url(photo, os.path.getmtime(photo))
-                            tip = f'<img src="{b64}" alt="">' if b64 else '<div class="no-photo">暂无照片</div>'
-                        else:
-                            tip = '<div class="no-photo">暂无定妆照</div>'
-                        url = f"?player={quote(pname)}&season={season}&dark={1 if dark_mode else 0}"
-                        cards.append(
-                            f'<div class="pl-cell"><a class="pl-link" href="{url}" '
-                            f'target="_self">'
-                            f'{pname}</a><span class="pl-tip">{tip}</span></div>'
-                        )
-                    st.markdown('<div class="pl-grid">' + "".join(cards) + '</div>',
-                                unsafe_allow_html=True)
+                _cells = []
+                for tname, pname, idx in _ordered:
+                    if tname != team_name:
+                        continue
+                    photo = _find_player_photo(season, pname)
+                    if photo:
+                        b64 = _photo_thumb_data_url(photo, os.path.getmtime(photo))
+                        tip = f'<img src="{b64}" alt="">' if b64 else '<div class="no-photo">暂无照片</div>'
+                    else:
+                        tip = '<div class="no-photo">暂无定妆照</div>'
+                    _cells.append(
+                        f'<div class="pl-cell"><span class="pl-link" onclick="pick({idx})">'
+                        f'{pname}</span><span class="pl-tip">{tip}</span></div>'
+                    )
+                _details_html.append(
+                    f'<details><summary>🏀 {team_name}（{len(teams[team_name])} 人）</summary>'
+                    f'<div class="pl-grid">{"".join(_cells)}</div></details>'
+                )
+
+            _script = """
+            <script>
+            (function(){
+              // 隐藏主页面上的 NAV_ 按钮
+              var bs = window.parent.document.querySelectorAll('button');
+              bs.forEach(function(b){
+                if(/^NAV_\\d+$/.test((b.textContent||'').trim())){ b.style.display='none'; }
+              });
+              window.pick = function(i){
+                var t = 'NAV_' + i;
+                var all = window.parent.document.querySelectorAll('button');
+                for(var k=0;k<all.length;k++){
+                  if((all[k].textContent||'').trim() === t){ all[k].click(); return; }
+                }
+                console.log('NAV button not found:', t);
+              };
+            })();
+            </script>
+            """
+            components.html(_css + "".join(_details_html) + _script, height=560)
 
     # ---------- 显示雷达图和球员信息（无论何时，只要 session_state 有数据就显示） ----------
     if st.session_state.get("radar_html"):
@@ -573,7 +629,8 @@ def main():
         with col_left:
             st.subheader("📊 能力雷达图")
             if st.button("🏠 返回首页", key="back_to_home", help="回到球员名单"):
-                for _k in ("radar_html", "radar_players", "radar_season", "share_card_bytes"):
+                for _k in ("radar_html", "radar_players", "radar_season", "share_card_bytes",
+                           "_pending_player", "_pending_season"):
                     st.session_state[_k] = None
                 st.query_params.clear()
                 st.rerun()
