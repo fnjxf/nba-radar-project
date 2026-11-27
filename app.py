@@ -141,6 +141,8 @@ def main():
     <style>
         .stApp {{ background-color: {bg}; color: {text}; }}
         section[data-testid="stSidebar"] {{ background-color: {sidebar_bg}; }}
+        /* 顶部工具栏跟随主题（深色模式下不再是白条） */
+        header[data-testid="stHeader"] {{ background-color: {sidebar_bg} !important; }}
         /* 隐藏自动页面导航：进仪表盘统一走侧边栏底部的管理员入口 */
         [data-testid="stSidebarNav"] {{ display: none !important; }}
         .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
@@ -502,6 +504,16 @@ def main():
             st.caption("悬停球员名看定妆照，点击直达该球员的雷达图（页面内切换，无白屏）")
 
             teams = df.groupby('team')['name'].apply(list).to_dict()
+
+            # 关键：承载点击的隐藏按钮外层容器默认各占 ~40px，174 个会把名单 iframe
+            # 挤到视口外（表现为"名单空白"）。这里把它们的容器高度直接压成 0。
+            st.markdown("""
+            <style>
+              /* 隐藏承载点击的按钮容器：必须 display:none，光压 height 不消 flex gap，
+                 否则 174 个空元素 × 16px gap 仍会把名单 iframe 顶到视口外 */
+              [class*="st-key-nav_"]{display:none!important;}
+            </style>
+            """, unsafe_allow_html=True)
 
             # (1) 隐藏按钮：每个球员一个，承载"页面内切换 + 传值"
             #     iframe 内的卡片点击时，用 JS 触发对应序号的按钮
