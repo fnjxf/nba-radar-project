@@ -1,9 +1,36 @@
 # charts/radar_chart.py
+import os
+import re
 from pyecharts.charts import Radar
 from pyecharts import options as opts
 
 # 按顺序分配的三种颜色（深色/浅色模式下都清晰）
 PLAYER_COLORS = ["#FF4B4B", "#4B84FF", "#319A44"]  # 红、蓝、绿
+
+# 本地 echarts 库：避免从境外 CDN 加载导致雷达图长时间空白
+_ECHARTS_LOCAL = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "assets", "echarts.min.js",
+)
+
+
+def _inline_echarts(html: str) -> str:
+    """把 CDN 的 echarts 引用替换成内联的本地 JS，让图表完全自包含、秒开。"""
+    if not os.path.isfile(_ECHARTS_LOCAL):
+        return html  # 找不到本地库就保留原样（降级）
+    try:
+        with open(_ECHARTS_LOCAL, "r", encoding="utf-8") as f:
+            js = f.read()
+        # pyecharts 生成的 CDN script 标签可能写成自闭合（无 </script>），
+        # 例如 <script type="text/javascript" src=".../echarts.min.js">
+        pattern = r'<script[^>]*src="https?://[^"]*echarts[^"]*\.js"[^>]*/?>'
+        if re.search(pattern, html, re.IGNORECASE):
+            # 用 lambda 作替换，避免 JS 里的反斜杠被 re.sub 当作转义序列
+            return re.sub(pattern, lambda m: "<script>" + js + "</script>",
+                          html, count=1, flags=re.IGNORECASE)
+    except Exception:
+        pass
+    return html
 
 
 def create_radar_chart(players_stats, dark_mode=True):
@@ -86,6 +113,9 @@ def create_radar_chart(players_stats, dark_mode=True):
     </style>
     '''
     html = html.replace('</head>', mobile_patch + '</head>')
+
+    # 内联本地 echarts，彻底去掉境外 CDN 依赖
+    html = _inline_echarts(html)
 
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(html)
