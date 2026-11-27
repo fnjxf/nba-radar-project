@@ -2,13 +2,44 @@
 import streamlit as st
 import pandas as pd
 import os
+import base64
+import io
+from urllib.parse import quote
 from utils.data_fetcher import get_playoff_stats
 from charts.radar_chart import create_radar_chart
 from utils.share_card import create_share_card
-from utils.welcome_dialog import show_welcome_dialog
+from utils.welcome_dialog import show_welcome_dialog, _DIALOG_KEY as _WELCOME_KEY
 import streamlit_analytics2 as sa2
 
 st.set_page_config(page_title="NBA 雷达图对比", layout="wide")
+
+# ---------- 照片工具（球员名单悬停预览用） ----------
+@st.cache_data(show_spinner=False)
+def _photo_thumb_data_url(path, mtime):
+    """把定妆照压成小图并转成 data URL，缓存避免重复处理。"""
+    try:
+        from PIL import Image
+        img = Image.open(path).convert("RGB")
+        img.thumbnail((150, 210))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=60, optimize=True)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
+
+
+def _find_player_photo(season, name):
+    """大小写不敏感地定位定妆照，返回路径或 None。"""
+    folder = os.path.join("photos", season)
+    if not os.path.isdir(folder):
+        return None
+    exact = os.path.join(folder, f"{name}.png")
+    if os.path.isfile(exact):
+        return exact
+    lowered = {f.lower(): f for f in os.listdir(folder)}
+    actual = lowered.get(f"{name}.png".lower())
+    return os.path.join(folder, actual) if actual else None
+
 
 # ---------- 访问统计 ----------
 # 仪表盘：在网址后加 ?analytics=on 查看
@@ -20,6 +51,30 @@ except Exception:
 
 
 def main():
+
+    # ---------- 从球员名单点进来的直达链接（?player=...&season=...&dark=...） ----------
+    _qp = st.query_params
+    if "player" in _qp:
+        _deep_player = _qp["player"]
+        _deep_season = _qp.get("season", "2022-23")
+        _deep_dark = _qp.get("dark", "0") == "1"
+        st.session_state.dark_mode = _deep_dark
+        st.session_state.season_select = _deep_season
+        # 直达页面跳过进站弹窗（整页重载会新建会话，否则每次点球员都会弹）
+        st.session_state[_WELCOME_KEY] = True
+        try:
+            _deep_stats = get_playoff_stats(_deep_player, _deep_season)
+            if _deep_stats:
+                _deep_html = create_radar_chart([_deep_stats], dark_mode=_deep_dark)
+                with open(_deep_html, "r", encoding="utf-8") as _fh:
+                    st.session_state.radar_html = _fh.read()
+                st.session_state.radar_players = [_deep_stats]
+                st.session_state.radar_season = _deep_season
+                st.session_state.share_card_bytes = None
+        except Exception:
+            pass
+        # 生成后清掉参数，避免后续 rerun 重复触发生成
+        st.query_params.clear()
 
     # ---------- 版本角标（侧边栏底部显示当前 commit，用于确认线上部署版本）----------
     def _build_tag():
@@ -288,7 +343,8 @@ def main():
         except FileNotFoundError:
             return []
 
-    season = st.sidebar.selectbox("选择赛季", ["2022-23", "2023-24", "2024-25"], index=0)
+    season = st.sidebar.selectbox("选择赛季", ["2022-23", "2023-24", "2024-25"],
+                                  key="season_select")
 
     # 初始化：记录排序状态和已选球员
     if "sort_by_name" not in st.session_state:
@@ -428,19 +484,49 @@ def main():
 
         if df is not None and not df.empty:
             st.subheader(f"📋 {season} 赛季季后赛出场球员名单（按球队分组）")
+            st.caption("悬停球员名看定妆照，点击直达该球员的雷达图")
 
-            # 按球队分组
+            # 悬停卡片样式（只注入一次）
+            st.markdown("""
+            <style>
+              .pl-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 10px;}
+              .pl-cell{position:relative;min-width:0;}
+              .pl-link{display:inline-block;max-width:100%;overflow:hidden;
+                text-overflow:ellipsis;white-space:nowrap;color:inherit;
+                text-decoration:none;cursor:pointer;padding:2px 4px;border-radius:4px;}
+              .pl-link:hover{color:#FFC72C!important;background:rgba(255,199,44,.10);}
+              .pl-tip{display:none;position:absolute;left:50%;bottom:115%;
+                transform:translateX(-50%);z-index:99999;background:#141414;
+                border:1px solid #555;border-radius:10px;padding:6px;
+                box-shadow:0 10px 28px rgba(0,0,0,.5);}
+              .pl-tip img{display:block;width:150px;border-radius:6px;}
+              .pl-tip .no-photo{width:150px;height:60px;display:flex;align-items:center;
+                justify-content:center;color:#aaa;font-size:12px;}
+              .pl-cell:hover .pl-tip{display:block;}
+              [data-testid="stExpander"] div[data-testid="stExpanderContent"]{overflow:visible!important;}
+            </style>
+            """, unsafe_allow_html=True)
+
             teams = df.groupby('team')['name'].apply(list).to_dict()
-
-            # 每个球队一个可折叠区块
             for team_name in sorted(teams.keys()):
                 players_in_team = teams[team_name]
                 with st.expander(f"🏀 {team_name}（{len(players_in_team)} 人）", expanded=False):
-                    # 每行显示 4 个球员
-                    cols = st.columns(4)
-                    for i, pname in enumerate(players_in_team):
-                        with cols[i % 4]:
-                            st.markdown(f"- {pname}")
+                    cards = []
+                    for pname in players_in_team:
+                        photo = _find_player_photo(season, pname)
+                        if photo:
+                            b64 = _photo_thumb_data_url(photo, os.path.getmtime(photo))
+                            tip = f'<img src="{b64}" alt="">' if b64 else '<div class="no-photo">暂无照片</div>'
+                        else:
+                            tip = '<div class="no-photo">暂无定妆照</div>'
+                        url = f"?player={quote(pname)}&season={season}&dark={1 if dark_mode else 0}"
+                        cards.append(
+                            f'<div class="pl-cell"><a class="pl-link" href="{url}" '
+                            f'target="_self">'
+                            f'{pname}</a><span class="pl-tip">{tip}</span></div>'
+                        )
+                    st.markdown('<div class="pl-grid">' + "".join(cards) + '</div>',
+                                unsafe_allow_html=True)
 
     # ---------- 显示雷达图和球员信息（无论何时，只要 session_state 有数据就显示） ----------
     if st.session_state.get("radar_html"):
@@ -486,6 +572,11 @@ def main():
 
         with col_left:
             st.subheader("📊 能力雷达图")
+            if st.button("🏠 返回首页", key="back_to_home", help="回到球员名单"):
+                for _k in ("radar_html", "radar_players", "radar_season", "share_card_bytes"):
+                    st.session_state[_k] = None
+                st.query_params.clear()
+                st.rerun()
             st.iframe(html_content, height=600)
 
             # ---------- 一键分享卡片 ----------
